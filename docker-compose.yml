@@ -1,0 +1,56 @@
+# Top level stuff
+name: liphium
+
+services:
+  # The database
+  database:
+    image: postgres:latest
+    env_file: "postgres.env"
+    networks:
+      - liphium
+    volumes:
+      - ./data:/var/lib/postgresql/data/
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d backend" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+
+  turn-server:
+    image: coturn/coturn:latest
+    networks:
+      - liphium
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+      - "5349:5349"
+      - "5349:5349/udp"
+      - "60000-60010:60000-60010/udp"
+    environment:
+      - DETECT_EXTERNAL_IP=yes
+      - DETECT_RELAY_IP=yes
+    volumes:
+      - ./coturn.conf:/etc/coturn/turnserver.conf
+
+  # Liphium main image with Chat, Spaces and Backend
+  liphium:
+    image: liphium
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:3002:3002"
+      - "127.0.0.1:3003:3003"
+    env_file: "config.env"
+    networks:
+      - liphium
+    depends_on:
+      database:
+        condition: service_healthy
+        restart: true
+      turn-server:
+        condition: service_started
+
+networks:
+  liphium:
